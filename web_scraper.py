@@ -5,6 +5,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 import time
+import uuid
 
 
 class LastManStandsScraper:
@@ -13,7 +14,7 @@ class LastManStandsScraper:
             "https://www.lastmanstands.com/team-profile/t20/?teamid=20327")
 
         self.player_link_list = []
-        self.player_dictionary = {}
+        self.master_list = []
 
     def load_and_accept_cookies(self) -> webdriver.Chrome:
         '''
@@ -40,7 +41,7 @@ class LastManStandsScraper:
         except TimeoutException:
             print("Loading took too much time!")
 
-    def get_player_link_container(self) -> Container:
+    def get_player_list_container(self) -> Container:
         '''
         Returns a container containing all player information
         Parameters
@@ -50,7 +51,7 @@ class LastManStandsScraper:
 
         Returns
         -------
-        player_link_list_container: a container within which all player information is contained
+        player_list_container: a container within which all player information is contained
         '''
 
         # finds the container within which the full list of player links are contained
@@ -69,21 +70,29 @@ class LastManStandsScraper:
             print("Loading took too much time!")
         player_link_body = player_link_container.find_element(
             By.XPATH, './tbody')
-        self.player_link_list_container = player_link_body.find_elements(By.XPATH,
-                                                                         './/tr')
+        self.player_list_container = player_link_body.find_elements(By.XPATH,
+                                                                    './/tr')
 
-    def create_player_dictionary(self) -> dict:
-        keys = []
-        value = {}
-        for item in self.player_link_list_container:
-            name = item.find_element(By.TAG_NAME, 'a').text
-            keys.append(name)
+    def create_master_list(self) -> list:
+        '''create_master_list creates template for the list where collceted data will be stored
+        Adds Player Name and Player Link to each unique entry.
 
-        self.player_dictionary = {key: value for key in keys}
-        print(self.player_dictionary)
+        Returns:
+            master_list: list with template for data storage
+        '''
+
+        for row in self.player_list_container:
+            name = row.find_element(By.TAG_NAME, 'a').text
+            a_tag = row.find_element(By.TAG_NAME, 'a')
+            link = a_tag.get_attribute('href')
+
+            player_dictionary = {"PlayerName": name, "UUID": str(
+                uuid.uuid4()), "PlayerLink": link, "ScorecardLinks": [], "ScorecardData": []}
+            self.master_list.append(player_dictionary)
 
     def get_player_links(self) -> list:
-        for item in self.player_link_list_container:
+
+        for item in self.player_list_container:
             a_tag = item.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
             self.player_link_list.append(link)
@@ -133,11 +142,11 @@ class LastManStandsScraper:
 
     def run_crawler(self):
         self.load_and_accept_cookies()
-        self.get_player_link_container()
-        self.create_player_dictionary()
-        self.get_player_links()
-        self.load_player_links()
-        self.get_scorecard_links()
+        self.get_player_list_container()
+        self.create_master_list()
+        # self.get_player_links()
+        # self.load_player_links()
+        # self.get_scorecard_links()
 
 
 def run():
