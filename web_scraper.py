@@ -89,8 +89,8 @@ class LastManStandsScraper:
 
         print(self.master_list)
 
-    def collect_scoreboard_links(self):
-        '''collect_scoreboard_links 
+    def collect_scoreboard_ids(self):
+        '''collect_scoreboard_ids 
         1. Load each Player Link
         2. Navigate to Scorecard Link
         3. Collect list of scorecard links and add to player dictionary
@@ -103,12 +103,12 @@ class LastManStandsScraper:
              '//*[@id="pp-sm-batting"]')).click()
             ((self.driver).find_element(By.XPATH,
              '//*[@id="batting-history-link-current"]')).click()
-            self.get_scorecard_links()
+            self.get_scoreboard_ids()
             player_dictionary['ScorecardLinks'].append(
-                self.scorecard_link_list)
+                self.scorecard_id_list)
 
-    def get_scorecard_links(self) -> list:
-        '''get_scorecard_links 
+    def get_scoreboard_ids(self) -> list:
+        '''get_scoreboard_ids 
         1. Wait for the player game table to load.
         2. Once loaded locate and create a list of scoreboard links on that page.
 
@@ -130,18 +130,19 @@ class LastManStandsScraper:
             By.XPATH, './tbody')
         scorecard_container_list = scorecard_container_body.find_elements(
             By.XPATH, './tr')
-        self.scorecard_link_list = []
+        self.scorecard_id_list = []
 
         for row in scorecard_container_list:
             a_tag = row.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
-            self.scorecard_link_list.append(link)
+            fixture_id = (link.split("="))[1]
+            self.scorecard_id_list.append(fixture_id)
 
     def run_crawler(self):
         self.load_and_accept_cookies()
         self.get_player_list_container()
         self.create_master_list()
-        self.collect_scoreboard_links()
+        self.collect_scoreboard_ids()
         print(self.master_list)
 
 
