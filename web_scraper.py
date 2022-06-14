@@ -12,8 +12,6 @@ class LastManStandsScraper:
     def __init__(self):
         self.URL = (
             "https://www.lastmanstands.com/team-profile/t20/?teamid=20327")
-
-        self.player_link_list = []
         self.master_list = []
 
     def load_and_accept_cookies(self) -> webdriver.Chrome:
@@ -85,34 +83,38 @@ class LastManStandsScraper:
             name = row.find_element(By.TAG_NAME, 'a').text
             a_tag = row.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
-
             player_dictionary = {"PlayerName": name, "UUID": str(
                 uuid.uuid4()), "PlayerLink": link, "ScorecardLinks": [], "ScorecardData": []}
             self.master_list.append(player_dictionary)
 
-    def get_player_links(self) -> list:
+        print(self.master_list)
 
-        for item in self.player_list_container:
-            a_tag = item.find_element(By.TAG_NAME, 'a')
-            link = a_tag.get_attribute('href')
-            self.player_link_list.append(link)
+    def collect_scoreboard_links(self):
+        '''collect_scoreboard_links 
+        1. Load each Player Link
+        2. Navigate to Scorecard Link
+        3. Collect list of scorecard links and add to player dictionary
 
-        print(self.player_link_list)
-
-    def load_player_links(self):
-        '''
-        Return content from each player page
         '''
 
-        for link in self.player_link_list:
-            (self.driver).get(link)
+        for player_dictionary in self.master_list:
+            (self.driver).get(player_dictionary['PlayerLink'])
             ((self.driver).find_element(By.XPATH,
              '//*[@id="pp-sm-batting"]')).click()
             ((self.driver).find_element(By.XPATH,
              '//*[@id="batting-history-link-current"]')).click()
             self.get_scorecard_links()
+            player_dictionary['ScorecardLinks'].append(
+                self.scorecard_link_list)
 
     def get_scorecard_links(self) -> list:
+        '''get_scorecard_links 
+        1. Wait for the player game table to load.
+        2. Once loaded locate and create a list of scoreboard links on that page.
+
+        Returns:
+            a list of scoreboard links
+        '''
 
         delay = 10
         try:
@@ -135,18 +137,16 @@ class LastManStandsScraper:
             link = a_tag.get_attribute('href')
             self.scorecard_link_list.append(link)
 
-    def add_scorecard_link_to_player_dict(self) -> dict:
-
-        for value in self.player_dictionary:
-            value.setdefault("scorecard_links", self.scorecard_link_list)
-
     def run_crawler(self):
         self.load_and_accept_cookies()
         self.get_player_list_container()
         self.create_master_list()
-        # self.get_player_links()
-        # self.load_player_links()
-        # self.get_scorecard_links()
+        self.collect_scoreboard_links()
+        print(self.master_list)
+
+
+def retrieve_player_data():
+    pass
 
 
 def run():
