@@ -4,6 +4,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException
 import time
 import uuid
 
@@ -84,7 +85,7 @@ class LastManStandsScraper:
             a_tag = row.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
             player_dictionary = {"PlayerName": name, "UUID": str(
-                uuid.uuid4()), "PlayerLink": link, "ScorecardLinks": [], "ScorecardData": []}
+                uuid.uuid4()), "PlayerLink": link, "ScorecardIds": [], "ScorecardData": []}
             self.master_list.append(player_dictionary)
 
         print(self.master_list)
@@ -138,16 +139,74 @@ class LastManStandsScraper:
             fixture_id = (link.split("="))[1]
             self.scorecard_id_list.append(fixture_id)
 
+    def retrieve_player_data(self):
+        # for player_dictionary in self.master_list:
+        #   for id in player_dictionary['ScorecardIds']:
+        #      ((self.driver)).get(f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
+        #   (self.driver).find_element(By.XPATH, '//*[@id="scorecard-2020-table-block"]')
+        ((self.driver)).get(
+            f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid=345123")
+
+        # find whether batting or bowling first.
+
+        scorecard_data_table_list = (self.driver).find_elements(
+            By.XPATH, './/table')
+
+        list_batting_names = (scorecard_data_table_list[0]).find_elements(
+            By.XPATH, './/td[@class="sc-name-section"]')
+
+        for name in list_batting_names:
+            player_name = name.find_element(By.TAG_NAME, 'a').text
+            if player_name == "Freddie Simon":
+                first_innings = "batting"
+                break
+            else:
+                first_innings = "bowling"
+
+        print(first_innings)
+
+        # get run data
+
+        if first_innings == "batting":
+
+            batting_data_body = scorecard_data_table_list[0].find_element(
+                By.XPATH, './tbody')
+            batting_data_list = batting_data_body.find_elements(
+                By.XPATH, './tr')
+
+            for row in batting_data_list:
+                try:
+                    player_name = row.find_element(By.TAG_NAME, 'a').text
+                    if player_name == "Freddie Simon":
+                        print("Name found")
+                        data_list = row.find_elements(By.XPATH, './td')
+                        batting_dictionary = {"How Out": (data_list[0].text).split("\n")[1], "Runs": data_list[1].text, "Balls": data_list[2].text,
+                                              "Fours": data_list[3].text, "Sixs": data_list[4].text, "SR": data_list[5].text}
+                except NoSuchElementException:
+                    continue
+
+    ''' if row.find_element(By.XPATH, './td[@class="sc-name-section"]') in row:
+    print("This one contains a name")
+    if row.find_element(By.TAG_NAME, 'a').text == "Freddie Simon":
+        print("Name found")
+        data_list = row.find_elements(By.XPATH, './td')
+        print(data_list)
+        batting_dictionary = {"Runs": data_list[0], "Balls": data_list[1],
+                                "Fours": data_list[2], "Sixs": data_list[3], "SR": data_list[4]}
+        break
+else:
+    print("Name not in this row")
+    '''
+
+    # print(batting_dictionary)
+
     def run_crawler(self):
         self.load_and_accept_cookies()
-        self.get_player_list_container()
-        self.create_master_list()
-        self.collect_scoreboard_ids()
-        print(self.master_list)
-
-
-def retrieve_player_data():
-    pass
+        # self.get_player_list_container()
+        # self.create_master_list()
+        # self.collect_scoreboard_ids()
+        # print(self.master_list)
+        self.retrieve_player_data()
 
 
 def run():
