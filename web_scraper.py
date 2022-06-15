@@ -145,45 +145,46 @@ class LastManStandsScraper:
         #      ((self.driver)).get(f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
         #   (self.driver).find_element(By.XPATH, '//*[@id="scorecard-2020-table-block"]')
         ((self.driver)).get(
-            f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid=345123")
+            f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid=345123")
 
         # find whether batting or bowling first.
 
         scorecard_data_table_list = (self.driver).find_elements(
             By.XPATH, './/table')
 
-        list_batting_names = (scorecard_data_table_list[0]).find_elements(
-            By.XPATH, './/td[@class="sc-name-section"]')
+        batting_data_body = scorecard_data_table_list[0].find_element(
+            By.XPATH, './tbody')
+        batting_data_list = batting_data_body.find_elements(
+            By.XPATH, './tr')
 
-        for name in list_batting_names:
-            player_name = name.find_element(By.TAG_NAME, 'a').text
-            if player_name == "Freddie Simon":
-                first_innings = "batting"
-                break
-            else:
-                first_innings = "bowling"
+        bowling_data_body = scorecard_data_table_list[1].find_element(
+            By.XPATH, './tbody')
+        bowling_data_list = bowling_data_body.find_elements(
+            By.XPATH, './tr')
 
-        print(first_innings)
+        for row in batting_data_list:
+            try:
+                player_name = row.find_element(By.TAG_NAME, 'a').text
+                if player_name == "Freddie Simon":
+                    print("Name found")
+                    data_list = row.find_elements(By.XPATH, './td')
+                    batting_dictionary = {"How Out": (data_list[0].text).split("\n")[1], "Runs": data_list[1].text, "Balls": data_list[2].text,
+                                          "Fours": data_list[3].text, "Sixs": data_list[4].text, "SR": data_list[5].text}
+                    print(batting_dictionary)
+            except NoSuchElementException:
+                continue
 
-        # get run data
-
-        if first_innings == "batting":
-
-            batting_data_body = scorecard_data_table_list[0].find_element(
-                By.XPATH, './tbody')
-            batting_data_list = batting_data_body.find_elements(
-                By.XPATH, './tr')
-
-            for row in batting_data_list:
-                try:
-                    player_name = row.find_element(By.TAG_NAME, 'a').text
-                    if player_name == "Freddie Simon":
-                        print("Name found")
-                        data_list = row.find_elements(By.XPATH, './td')
-                        batting_dictionary = {"How Out": (data_list[0].text).split("\n")[1], "Runs": data_list[1].text, "Balls": data_list[2].text,
-                                              "Fours": data_list[3].text, "Sixs": data_list[4].text, "SR": data_list[5].text}
-                except NoSuchElementException:
-                    continue
+        for row in bowling_data_list:
+            try:
+                player_name = row.find_element(By.TAG_NAME, 'a').text
+                if player_name == "Freddie Simon":
+                    print("Name found")
+                    data_list = row.find_elements(By.XPATH, './td')
+                    bowling_dictionary = {"Overs": data_list[1].text, "Runs": data_list[2].text,
+                                          "Wickets": data_list[3].text, "Maidens": data_list[4].text, "Economy": data_list[5].text}
+                    print(bowling_dictionary)
+            except NoSuchElementException:
+                continue
 
     ''' if row.find_element(By.XPATH, './td[@class="sc-name-section"]') in row:
     print("This one contains a name")
