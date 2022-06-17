@@ -1,4 +1,5 @@
 from email.mime import image
+from msilib.schema import Directory
 from typing import Container
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -14,12 +15,38 @@ import requests
 
 
 class LastManStandsScraper:
+    ''' This class is used to represent a web scraper
+
+    Attribues:
+    URL (str): The url of website to be scraped
+    master_list: List where scraped data to be stored
+    test_list: List to substitute in for master list to test specific methods
+
+    '''
+
     def __init__(self):
+        '''
+        See help(Date) for accurate signature
+        '''
         self.URL = (
             "https://www.lastmanstands.com/team-profile/t20/?teamid=20327")
         self.master_list = []
         self.test_list = [{'PlayerName': 'Freddie Simon', 'UUID': '62dafa1f-3fc9-428f-bce1-afba3c579853', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ["https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?190859717"],
                            'ScorecardIds': [], 'ScorecardBattingData': [], 'ScorecardBowlingData': [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}]
+
+    def create_data_storage_folder(self) -> Directory:
+        '''save_data_collected 
+
+        1. Check and create raw_data folder for data storage
+        Returns:
+            create raw_data file
+        '''
+        # create raw_data if it doesn't exist
+        path = os.getcwd()
+        self.dir = os.path.join(path, "raw_data")
+        # create folder for each player's data
+        if not os.path.exists(self.dir):
+            os.mkdir(self.dir)
 
     def load_and_accept_cookies(self) -> webdriver.Chrome:
         '''
@@ -79,7 +106,7 @@ class LastManStandsScraper:
                                                                     './/tr')
 
     def create_master_list(self) -> list:
-        '''_create_master_list creates template for the list where collceted data will be stored
+        '''_create_master_list creates template for the list where collected data will be stored
         Adds Player Name and Player Link to each unique entry.
 
         Returns:
@@ -94,10 +121,9 @@ class LastManStandsScraper:
                 uuid.uuid4()), "PlayerLink": link, 'ImageLink': [], "ScorecardIds": [], "ScorecardBattingData": [], "ScorecardBowlingData": [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}
             self.master_list.append(player_dictionary)
 
-        print(self.master_list)
-
     def collect_scoreboard_ids_and_profile_image_link(self):
         '''_collect_scoreboard_ids_and_profile_image_link 
+
         1. Load each Player Link
         2. Collect player profile photo link
         3. Navigate to Scorecard Link
@@ -117,6 +143,13 @@ class LastManStandsScraper:
             self._get_scoreboard_ids(player_dictionary)
 
     def _get_player_profile_photo(self, player_dictionary):
+        '''_get_player_profile_photo This function is to get link for player profile photo
+
+        Once the link is location on the page, it is added to the player dictionary]
+
+        Arguments:
+            player_dictionary -- dictionary individual to each player to place collected data
+        '''
         image_container = (self.driver).find_element(
             By.XPATH, '//div[@id="player-profile-2020-top-block-pic"]')
         image_tag = image_container.find_element(By.TAG_NAME, 'img')
@@ -125,9 +158,12 @@ class LastManStandsScraper:
 
     def _get_scoreboard_ids(self, player_dictionary) -> list:
         '''_get_scoreboard_ids 
+        This function locates and stores id of games each player is involved with.    
+
         1. Wait for the player game table to load.
         2. Once loaded locate and create a list of scoreboard links on that page.
-
+        Arguments:
+            player_dictionary -- dictionary individual to each player to place collected data
         Returns:
             a list of scoreboard links
         '''
@@ -154,39 +190,41 @@ class LastManStandsScraper:
             fixture_id = (link.split("="))[1]
             self.scorecard_id_list.append(fixture_id)
 
-        player_dictionary['ScorecardIds'].append(
-            self.scorecard_id_list)
+        player_dictionary['ScorecardIds'] = self.scorecard_id_list
 
-    def retrieve_all_player_data(self):
+    def retrieve_and_save_all_player_data(self):
         ''' 
-        1. Load each relevant page for each fixture id
+        This method locates, pulls and save fixture information relevant to each player.
+
+        1. Load each relevant page for each fixture id.
         2. Run collection methods to gather batter, bowler and award data.
-        3. Run method to programatically store player data
+        3. Run method to programatically store player data.
         '''
 
-        for player_dictionary in self.test_list:
-            for id_list in player_dictionary['ScorecardIds']:
-                for id in id_list:
-                    ((self.driver)).get(
-                        f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
-                    self._get_scorecard_player_data(player_dictionary)
-                    ((self.driver)).get(
-                        f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid={id}")
-                    self._get_scorecard_player_data(player_dictionary)
-                    ((self.driver)).get(
-                        f"https://www.lastmanstands.com/leagues/scorecard/stats?fixtureid={id}")
-                    self._get_player_awards(player_dictionary)
-            self._save_player_data(player_dictionary)
+        for player_dictionary in self.master_list:
+            for id in player_dictionary['ScorecardIds']:
+
+                ((self.driver)).get(
+                    f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
+                self._get_scorecard_player_data(player_dictionary)
+                ((self.driver)).get(
+                    f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid={id}")
+                self._get_scorecard_player_data(player_dictionary)
+                ((self.driver)).get(
+                    f"https://www.lastmanstands.com/leagues/scorecard/stats?fixtureid={id}")
+                self._get_player_awards(player_dictionary)
+            self._create_player_directory_structure(player_dictionary)
+            self._save_player_dictionary_to_file(player_dictionary)
             self._download_and_save_images(player_dictionary)
 
     def _get_scorecard_player_data(self, player_dictionary):
-        '''_get_scorecard_player_data Locate and add abtting and bowling data to each player dictionary
+        '''_get_scorecard_player_data Locate and add batting and bowling data to each player dictionary
 
         Arguments:
-            player_dictionary -- individual player dictionary for each play in master list
+            player_dictionary -- dictionary individual to each player to place collected data
         '''
 
-        # Create tables for battings data and bowling data
+        # Create tables for battings data and bowling data as information stored in different format for each one
         scorecard_data_table_list = (self.driver).find_elements(
             By.XPATH, './/table')
 
@@ -231,10 +269,11 @@ class LastManStandsScraper:
                 continue
 
     def _get_player_awards(self, player_dictionary):
-        '''_get_player_awards Run methods to collect information on player awards
+        '''_get_player_awards 
+        Run methods to collect information on player awards
 
         Arguments:
-            player_dictionary -- individual player dictionary for each play in master list
+            player_dictionary -- dictionary individual to each player to place collected data
         '''
 
         self._get_most_valuable_player_award(player_dictionary)
@@ -242,11 +281,12 @@ class LastManStandsScraper:
         self._get_most_valuable_bowler_award(player_dictionary)
 
     def _get_most_valuable_player_award(self, player_dictionary):
-        '''_get_most_valuable_player_award method to find if MVP award won
-        If won, add to count of awards
+        '''_get_most_valuable_player_award 
+        Method to find if MVP award won by player
 
+        If award won, add value to count of awards
         Arguments:
-            player_dictionary -- individual player dictionary for each play in master list
+            player_dictionary -- dictionary individual to each player to place collected data
         '''
         mvp_container = (self.driver).find_element(
             By.XPATH, '//div[@id="scorecard-2020-stats-block-mvp"]')
@@ -264,11 +304,12 @@ class LastManStandsScraper:
                 continue
 
     def _get_most_valuable_batter_award(self, player_dictionary):
-        '''_get_most_valuable_batter_award method to find if MVbatter award won
-        If won, add to count of awards
+        '''_get_most_valuable_batter_award 
+        method to find if Most Valuable Batter award won
 
+        If award won, add value to count of awards
         Arguments:
-            player_dictionary -- individual player dictionary for each play in master list
+            player_dictionary -- dictionary individual to each player to place collected data
         '''
         mvb_container = (self.driver).find_element(
             By.XPATH, '//div[@id="scorecard-2020-stats-block-mvbat"]')
@@ -286,11 +327,12 @@ class LastManStandsScraper:
                 continue
 
     def _get_most_valuable_bowler_award(self, player_dictionary):
-        '''_get_most_valuable_bowler_award method to find if MVBowler award won
-        If won, add to count of awards
+        '''_get_most_valuable_bowler_award 
+        Method to find if Most Valuable Bowler award won
 
+        If award won, add value to count of awards
         Arguments:
-            player_dictionary -- individual player dictionary for each play in master list
+            player_dictionary -- dictionary individual to each player to place collected data
         '''
         mvb_container = (self.driver).find_element(
             By.XPATH, '//div[@id="scorecard-2020-stats-block-mvbowl"]')
@@ -307,51 +349,50 @@ class LastManStandsScraper:
             except NoSuchElementException:
                 continue
 
-    def create_data_storage_folder(self):
-        '''save_data_collected 
-        1. Check and create raw_data folder for data storage
+    def _create_player_directory_structure(self, player_dictionary) -> Directory:
+        '''_create_player_directory_structure 
+        Method to create player directory structure for each player
 
-
-        Returns:
-            create raw_data file
-        '''
-        # create raw_data if it doesn't exist
-        path = os.getcwd()
-        self.dir = os.path.join(path, "raw_data")
-        # create folder for each player's data
-        if not os.path.exists(self.dir):
-            os.mkdir(self.dir)
-
-    def _save_player_data(self, player_dictionary) -> json:
-        '''save_player_data 
-        1. Programatically store data for each player locally
-        2. Create image folder
-
+        1. Create player folder if does not exist
+        2. Create image folder if does not exist
         Arguments:
-            player_dictionary -- dictionary containing information collected for each player
-
+            player_dictionary -- dictionary individual to each player to place collected data
         Returns:
-            json file with player data.
+            Directory in raw_data folder of "PlayerName" -> "Images"
         '''
 
         # create folder for each player id
-        player_dir = os.path.join(self.dir, player_dictionary["PlayerName"])
-        if not os.path.exists(player_dir):
-            os.mkdir(player_dir)
-        # change directory to player id directory
-        os.chdir(player_dir)
-        self.image_dir = os.path.join(player_dir, "images")
+        self.player_dir = os.path.join(
+            self.dir, player_dictionary["PlayerName"])
+        if not os.path.exists(self.player_dir):
+            os.mkdir(self.player_dir)
+        # create image folder
+        self.image_dir = os.path.join(self.player_dir, "images")
         if not os.path.exists(self.image_dir):
             os.mkdir(self.image_dir)
 
+    def _save_player_dictionary_to_file(self, player_dictionary) -> json:
+        '''_save_player_dictionary_to_file 
+        This method saves each player dictionary in the player directory
+
+        Method desgined to be called programatically as data collected for each player
+
+        1. Change file path to player directory path
+        2. Dump player dictionary in data.json file
+        Arguments:
+            player_dictionary -- _description_
+        '''
+        os.chdir(self.player_dir)
         with open("data.json", "w") as fp:
             json.dump(player_dictionary, fp)
 
     def _download_and_save_images(self, player_dictionary) -> image:
-        '''_download_images _summary_
+        '''_download_images 
+        This method downloads and saves each player profile photo
 
+        Each image is saved to the images file
         Returns:
-            _description_
+            JPG file
         '''
         os.chdir(self.image_dir)
         index = 0
@@ -362,12 +403,15 @@ class LastManStandsScraper:
             index += 1
 
     def run_crawler(self):
+        '''run_crawler 
+        Calling method to call other methods.
+        '''
         self.create_data_storage_folder()
         self.load_and_accept_cookies()
-        # self.get_player_list_container()
-        # self.create_master_list()
-        # self.collect_scoreboard_ids_and_profile_image_link()
-        self.retrieve_all_player_data()
+        self.get_player_list_container()
+        self.create_master_list()
+        self.collect_scoreboard_ids_and_profile_image_link()
+        self.retrieve_and_save_all_player_data()
 
 
 def run():
