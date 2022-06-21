@@ -50,4 +50,14 @@ I created a general Scraper class using Selenium. In the constructor, the Seleni
 * _download_and_save_images(self, player_dictionary) -> image:
          * download and save jpgs for each image links to image folder
          * called during data collection to limit failure of crawler fails during scraping   
+
+
+## Testing
+
+* Using unittest, a unittest TestCase class was created to check scraper was pulling the correct information.
+* test_collect_scoreboard_ids_and_profile_image_link(self) checks that the information collected for each scorecard associated with each player and that the scraper has located an image link
+* test_retrieve_and_save_all_player_data_master_list(self) this replaces the "master_list" with a mocked list to restrict data collection to one player.
+          * retrieved data is then checked against a known accurate dictionary
+          * saved data is also check it is stored int he correct location and contains accurate information
+          * saved images are also checked that they exist in the correct location and match the correct format. 
          
