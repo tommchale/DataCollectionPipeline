@@ -1,5 +1,4 @@
 from email.mime import image
-from msilib.schema import Directory
 from typing import Container
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -34,12 +33,14 @@ class LastManStandsScraper:
         self.test_list = [{'PlayerName': 'Freddie Simon', 'UUID': '62dafa1f-3fc9-428f-bce1-afba3c579853', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ["https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?190859717"],
                            'ScorecardIds': [], 'ScorecardBattingData': [], 'ScorecardBowlingData': [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}]
 
-    def create_data_storage_folder(self) -> Directory:
+    def create_data_storage_folder(self):
         '''save_data_collected 
 
         1. Check and create raw_data folder for data storage
         Returns:
             create raw_data file
+
+        Could this be static?
         '''
         # create raw_data if it doesn't exist
         path = os.getcwd()
@@ -104,6 +105,7 @@ class LastManStandsScraper:
             By.XPATH, './tbody')
         self.player_list_container = player_link_body.find_elements(By.XPATH,
                                                                     './/tr')
+        print(self.player_list_container)
 
     def create_master_list(self) -> list:
         '''_create_master_list creates template for the list where collected data will be stored
@@ -349,7 +351,7 @@ class LastManStandsScraper:
             except NoSuchElementException:
                 continue
 
-    def _create_player_directory_structure(self, player_dictionary) -> Directory:
+    def _create_player_directory_structure(self, player_dictionary):
         '''_create_player_directory_structure 
         Method to create player directory structure for each player
 
