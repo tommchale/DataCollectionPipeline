@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock
 import os
 import json
-from selenium import webdriver
 
 from web_scraper import LastManStandsScraper
 
