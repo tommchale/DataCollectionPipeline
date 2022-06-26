@@ -11,6 +11,8 @@ import uuid
 import os
 import json
 import requests
+import pandas as pd
+from sqlalchemy import create_engine
 
 
 class LastManStandsScraper:
@@ -32,6 +34,12 @@ class LastManStandsScraper:
         self.master_list = []
         self.test_list = [{'PlayerName': 'Freddie Simon', 'UUID': '62dafa1f-3fc9-428f-bce1-afba3c579853', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ["https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?190859717"],
                            'ScorecardIds': [], 'ScorecardBattingData': [], 'ScorecardBowlingData': [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}]
+        self.test_list_2 = [{'PlayerName': 'Freddie Simon', 'UUID': '5b857df2-b7e5-490c-bf96-23a261398afd', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ['https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?646828954'], 'ScorecardIds': ['345124', '345121'], 'ScorecardBattingData': [{'How Out': 'Terrible Bloke', 'Runs': '112', 'Balls': '34',
+                                                                                                                                                                                                                                                                                                                                                                             'Fours': '7', 'Sixes': '9', 'SR': '329.41'}, {'How Out': 'Caught', 'Runs': '9', 'Balls': '4', 'Fours': '2', 'Sixes': '0', 'SR': '225.00'}], 'ScorecardBowlingData': [{'Overs': '4.0', 'Runs': '38', 'Wickets': '1', 'Maidens': '0', 'Economy': '9.50'}, {'Overs': '2.1', 'Runs': '11', 'Wickets': '1', 'Maidens': '0', 'Economy': '5.24'}], 'Awards': {'MostValuablePlayer': 1, 'MostValuableBatter': 1, 'MostValuableBowler': 0}}]
+
+    def ask_local_or_online_storage(self):
+        self.user_choice = input(
+            ' \n Please press 1 for local storage, 2 for online (RDS) or 3 for both \n')
 
     def create_data_storage_folder(self):
         '''save_data_collected 
@@ -43,11 +51,12 @@ class LastManStandsScraper:
         Could this be static?
         '''
         # create raw_data if it doesn't exist
-        path = os.getcwd()
-        self.dir = os.path.join(path, "raw_data")
-        # create folder for each player's data
-        if not os.path.exists(self.dir):
-            os.mkdir(self.dir)
+        if self.user_choice == "1" or self.user_choice == "3":
+            path = os.getcwd()
+            self.dir = os.path.join(path, "raw_data")
+            # create folder for each player's data
+            if not os.path.exists(self.dir):
+                os.mkdir(self.dir)
 
     def load_and_accept_cookies(self) -> webdriver.Chrome:
         '''
@@ -105,7 +114,6 @@ class LastManStandsScraper:
             By.XPATH, './tbody')
         self.player_list_container = player_link_body.find_elements(By.XPATH,
                                                                     './/tr')
-        print(self.player_list_container)
 
     def create_master_list(self) -> list:
         '''_create_master_list creates template for the list where collected data will be stored
@@ -190,7 +198,10 @@ class LastManStandsScraper:
             a_tag = row.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
             fixture_id = (link.split("="))[1]
-            self.scorecard_id_list.append(fixture_id)
+            if fixture_id == "0":
+                continue
+            else:
+                self.scorecard_id_list.append(fixture_id)
 
         player_dictionary['ScorecardIds'] = self.scorecard_id_list
 
@@ -215,9 +226,13 @@ class LastManStandsScraper:
                 ((self.driver)).get(
                     f"https://www.lastmanstands.com/leagues/scorecard/stats?fixtureid={id}")
                 self._get_player_awards(player_dictionary)
-            self._create_player_directory_structure(player_dictionary)
-            self._save_player_dictionary_to_file(player_dictionary)
-            self._download_and_save_images(player_dictionary)
+            if self.user_choice == "1" or self.user_choice == "3":
+                self._create_player_directory_structure(player_dictionary)
+                self._save_player_dictionary_to_file(player_dictionary)
+                self._download_and_save_images(player_dictionary)
+            elif self.user_choice == "2" or self.user_choice == "3":
+                self._create_pandas_dataframes(player_dictionary)
+                self._upload_dataframes_to_rds()
 
     def _get_scorecard_player_data(self, player_dictionary):
         '''_get_scorecard_player_data Locate and add batting and bowling data to each player dictionary
@@ -246,7 +261,7 @@ class LastManStandsScraper:
             try:
                 player_name = row.find_element(By.TAG_NAME, 'a').text
                 if player_name == player_dictionary["PlayerName"]:
-                    print("Name found")
+                    print(player_name)
                     data_list = row.find_elements(By.XPATH, './td')
                     batting_dictionary = {"How Out": (data_list[0].text).split("\n")[1], "Runs": data_list[1].text, "Balls": data_list[2].text,
                                           "Fours": data_list[3].text, "Sixes": data_list[4].text, "SR": data_list[5].text}
@@ -261,7 +276,7 @@ class LastManStandsScraper:
             try:
                 player_name = row.find_element(By.TAG_NAME, 'a').text
                 if player_name == player_dictionary["PlayerName"]:
-                    print("Name found")
+                    print(player_name)
                     data_list = row.find_elements(By.XPATH, './td')
                     bowling_dictionary = {"Overs": data_list[1].text, "Runs": data_list[2].text,
                                           "Wickets": data_list[3].text, "Maidens": data_list[4].text, "Economy": data_list[5].text}
@@ -403,6 +418,111 @@ class LastManStandsScraper:
             with open(f"{index}.jpg", 'wb') as handler:
                 handler.write(img_data)
             index += 1
+
+    def _create_pandas_dataframes(self, player_dictionary):
+
+        # create player, uuid, scorecarddata frames
+
+        self.players = pd.DataFrame(player_dictionary, columns=[
+            'PlayerName', 'UUID', 'PlayerLink'], index=[0])
+        uuid = pd.DataFrame(player_dictionary, columns=['UUID'], index=[0])
+        scorecards = pd.DataFrame(player_dictionary, columns=[
+                                  'ScorecardIds', 'UUID'])
+
+        # rename player, scorecard and uuid df
+
+        self.players = self.players.rename(
+            columns={"PlayerName": "name", "UUID": "uuid", "PlayerLink": "lms_profile_link"})
+        scorecards = scorecards.rename(
+            columns={"ScorecardIds": "scorecard_id", "UUID": "uuid"})
+        uuid = uuid.rename(columns={"UUID": "uuid"})
+
+        # set players and scorecards dtypes
+
+        self.players['name'] = self.players['name'].astype('string')
+        self.players['uuid'] = self.players['uuid'].astype('string')
+        self.players['lms_profile_link'] = self.players['lms_profile_link'].astype(
+            'string')
+
+        scorecards['scorecard_id'] = scorecards['scorecard_id'].astype('int64')
+        scorecards['uuid'] = scorecards['uuid'].astype('string')
+
+        # create, rename and merge awards with uuid
+        awards = pd.DataFrame(player_dictionary['Awards'], index=[0])
+        awards = awards.rename(columns={"MostValuablePlayer": "most_valuable_player",
+                               "MostValuableBatter": "most_valuable_batter", "MostValuableBowler": "most_valuable_bowler"})
+        self.combine_awards = pd.merge(
+            uuid, awards, left_index=True, right_index=True)
+        self.combine_awards['uuid'] = self.combine_awards['uuid'].astype(
+            'string')
+
+        # as some players may not have batting data
+        if player_dictionary['ScorecardBattingData']:
+            batting_data = pd.DataFrame(
+                player_dictionary['ScorecardBattingData'])
+            batting_data = batting_data.rename(columns={"How Out": "how_out", "Runs": "runs_scored",
+                                                        "Balls": "balls_faced", "Fours": "fours", "Sixes": "sixes", "SR": "strike_rate"})
+            self.combine_batting = pd.merge(
+                scorecards, batting_data, left_index=True, right_index=True)
+            self.combine_batting['how_out'] = self.combine_batting['how_out'].astype(
+                'category')
+            self.combine_batting['runs_scored'] = self.combine_batting['runs_scored'].astype(
+                'int64')
+            self.combine_batting['balls_faced'] = self.combine_batting['balls_faced'].astype(
+                'int64')
+            self.combine_batting['fours'] = self.combine_batting['fours'].astype(
+                'int64')
+            self.combine_batting['sixes'] = self.combine_batting['sixes'].astype(
+                'int64')
+            self.combine_batting['strike_rate'] = self.combine_batting['strike_rate'].astype(
+                'float64')
+        elif not player_dictionary['ScorecardBattingData']:
+            self.combine_batting = None
+
+        # some player may not have bowling data
+        if player_dictionary['ScorecardBowlingData']:
+            bowling_data = pd.DataFrame(
+                player_dictionary['ScorecardBowlingData'])
+            bowling_data = bowling_data.rename(columns={
+                "Overs": "overs", "Runs": "runs_conceeded", "Wickets": "wickets", "Maidens": "maidens", "Economy": "economy"})
+            self.combine_bowling = pd.merge(
+                scorecards, bowling_data, left_index=True, right_index=True)
+            self.combine_bowling['overs'] = self.combine_bowling['overs'].astype(
+                'float64')
+            self.combine_bowling['runs_conceeded'] = self.combine_bowling['runs_conceeded'].astype(
+                'int64')
+            self.combine_bowling['wickets'] = self.combine_bowling['wickets'].astype(
+                'int64')
+            self.combine_bowling['maidens'] = self.combine_bowling['maidens'].astype(
+                'int64')
+            self.combine_bowling['economy'] = self.combine_bowling['economy'].astype(
+                'float64')
+        # reset df in case no data present
+        elif not player_dictionary['ScorecardBowlingData']:
+            self.combine_bowling = None
+
+    def _upload_dataframes_to_rds(self):
+
+        DATABASE_TYPE = 'postgresql'
+        DBAPI = 'psycopg2'
+        ENDPOINT = 'aicoredb.cz91qpjes5tm.us-east-1.rds.amazonaws.com'
+        USER = 'postgres'
+        PASSWORD = 'AlbertKingClarks8*'
+        PORT = 5432
+        DATABASE = 'lms_db'
+
+        engine = create_engine(
+            f"{DATABASE_TYPE}+{DBAPI}://{USER}:{PASSWORD}@{ENDPOINT}:{PORT}/{DATABASE}")
+
+        self.players.to_sql('players', engine, if_exists='append')
+        self.combine_awards.to_sql(
+            'awards', engine, if_exists='append')
+        if self.combine_batting is not None:
+            self.combine_batting.to_sql(
+                'batting', engine, if_exists='append')
+        if self.combine_bowling is not None:
+            self.combine_bowling.to_sql(
+                'bowling', engine, if_exists='append')
 
     def run_crawler(self):
         '''run_crawler 
