@@ -60,4 +60,15 @@ I created a general Scraper class using Selenium. In the constructor, the Seleni
           * retrieved data is then checked against a known accurate dictionary
           * saved data is also check it is stored int he correct location and contains accurate information
           * saved images are also checked that they exist in the correct location and match the correct format. 
+## RDS and S3 data uploads
+
+* Included functionality to upload data scraped to RDS SQL database
+* Database is hosted in pgAdmin 
+* Data collected from website in a dictionary where _create_pandas_dataframes converts in Pandas dataframes
+* Learning points here were correct data types and naming conventions to allow for utilisation of SQL queries
+* scraper required modification as not all players have batting and bowling data
+* Data then uploaded to RDS using sqalchemy
+* Scraped image data hosted in an s3 bucket uploaded using boto3
+* Functionality also added to provide user option for local or online data storage
+* env file added to ensire security of credentials for connecting to databases.
          
