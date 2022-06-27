@@ -24,7 +24,7 @@ class WebScraperTestCase(unittest.TestCase):
         # Change it for your AWS endpoint
         ENDPOINT = 'aicoredb.cz91qpjes5tm.us-east-1.rds.amazonaws.com'
         USER = 'postgres'
-        PASSWORD = 'AlbertKingClarks8*'
+        PASSWORD = os.getenv("PASSWORD")
         PORT = 5432
         DATABASE = 'lms_db'
 
