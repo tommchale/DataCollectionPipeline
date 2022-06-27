@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
+from dotenv import load_dotenv
 import time
 import uuid
 import os
@@ -505,13 +506,14 @@ class LastManStandsScraper:
 
     def _upload_dataframes_to_rds(self):
 
-        DATABASE_TYPE = 'postgresql'
-        DBAPI = 'psycopg2'
-        ENDPOINT = 'aicoredb.cz91qpjes5tm.us-east-1.rds.amazonaws.com'
-        USER = 'postgres'
-        PASSWORD = os.getenv("PASSWORD")
-        PORT = 5432
-        DATABASE = 'lms_db'
+        DATABASE_TYPE = os.getenv('RDS_DATABASE_TYPE')
+        DBAPI = os.getenv('RDS_DBAPI')
+        ENDPOINT = os.getenv('RDS_ENDPOINT')
+        USER = os.getenv('RDS_USER')
+        PASSWORD = os.getenv('RDS_PASSWORD')
+
+        PORT = os.get_env('RDS_PORT')
+        DATABASE = os.get_env('RDS_DATABASE')
 
         engine = create_engine(
             f"{DATABASE_TYPE}+{DBAPI}://{USER}:{PASSWORD}@{ENDPOINT}:{PORT}/{DATABASE}")
