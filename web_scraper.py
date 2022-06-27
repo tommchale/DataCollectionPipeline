@@ -13,6 +13,7 @@ import json
 import requests
 import pandas as pd
 from sqlalchemy import create_engine
+import boto3
 
 
 class LastManStandsScraper:
@@ -233,6 +234,7 @@ class LastManStandsScraper:
             elif self.user_choice == "2" or self.user_choice == "3":
                 self._create_pandas_dataframes(player_dictionary)
                 self._upload_dataframes_to_rds()
+                self._upload_images_to_s3_bucket(player_dictionary)
 
     def _get_scorecard_player_data(self, player_dictionary):
         '''_get_scorecard_player_data Locate and add batting and bowling data to each player dictionary
@@ -507,7 +509,7 @@ class LastManStandsScraper:
         DBAPI = 'psycopg2'
         ENDPOINT = 'aicoredb.cz91qpjes5tm.us-east-1.rds.amazonaws.com'
         USER = 'postgres'
-        PASSWORD = 'AlbertKingClarks8*'
+        PASSWORD = os.getenv("PASSWORD")
         PORT = 5432
         DATABASE = 'lms_db'
 
@@ -523,6 +525,20 @@ class LastManStandsScraper:
         if self.combine_bowling is not None:
             self.combine_bowling.to_sql(
                 'bowling', engine, if_exists='append')
+
+    def _upload_images_to_s3_bucket(self, player_dictionary):
+        s3_client = boto3.client('s3')
+        bucket_name = 'lmsbucket2022'
+        folder_name = f"{player_dictionary['PlayerName']}"
+        result = s3_client.list_objects(Bucket=bucket_name, Prefix=folder_name)
+        if 'Contents' not in result:
+            s3_client.put_object(Bucket=bucket_name, Key=(folder_name+'/'))
+            index = 0
+            for link in player_dictionary['ImageLink']:
+                img_data = requests.get(link).content
+                s3_client.put_object(Body=img_data, Bucket=bucket_name, Key=(
+                    f"{folder_name}/{index}.jpg"))
+                index += 1
 
     def run_crawler(self):
         '''run_crawler 
