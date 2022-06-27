@@ -6,9 +6,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
-from dotenv import load_dotenv
+from decouple import config
 import time
 import uuid
+import sys
 import os
 import json
 import requests
@@ -35,13 +36,13 @@ class LastManStandsScraper:
             "https://www.lastmanstands.com/team-profile/t20/?teamid=20327")
         self.master_list = []
         self.test_list = [{'PlayerName': 'Freddie Simon', 'UUID': '62dafa1f-3fc9-428f-bce1-afba3c579853', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ["https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?190859717"],
-                           'ScorecardIds': [], 'ScorecardBattingData': [], 'ScorecardBowlingData': [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}]
+                           'ScorecardIds': ['345121'], 'ScorecardBattingData': [], 'ScorecardBowlingData': [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}]
         self.test_list_2 = [{'PlayerName': 'Freddie Simon', 'UUID': '5b857df2-b7e5-490c-bf96-23a261398afd', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ['https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?646828954'], 'ScorecardIds': ['345124', '345121'], 'ScorecardBattingData': [{'How Out': 'Terrible Bloke', 'Runs': '112', 'Balls': '34',
                                                                                                                                                                                                                                                                                                                                                                              'Fours': '7', 'Sixes': '9', 'SR': '329.41'}, {'How Out': 'Caught', 'Runs': '9', 'Balls': '4', 'Fours': '2', 'Sixes': '0', 'SR': '225.00'}], 'ScorecardBowlingData': [{'Overs': '4.0', 'Runs': '38', 'Wickets': '1', 'Maidens': '0', 'Economy': '9.50'}, {'Overs': '2.1', 'Runs': '11', 'Wickets': '1', 'Maidens': '0', 'Economy': '5.24'}], 'Awards': {'MostValuablePlayer': 1, 'MostValuableBatter': 1, 'MostValuableBowler': 0}}]
 
     def ask_local_or_online_storage(self):
         self.user_choice = input(
-            ' \n Please press 1 for local storage, 2 for online (RDS) or 3 for both \n')
+            ' \n Please press 1 for local storage, 2 for online (RDS - table, S3 - images) or 3 for both: \n')
 
     def create_data_storage_folder(self):
         '''save_data_collected 
@@ -506,14 +507,13 @@ class LastManStandsScraper:
 
     def _upload_dataframes_to_rds(self):
 
-        DATABASE_TYPE = os.getenv('RDS_DATABASE_TYPE')
-        DBAPI = os.getenv('RDS_DBAPI')
-        ENDPOINT = os.getenv('RDS_ENDPOINT')
-        USER = os.getenv('RDS_USER')
-        PASSWORD = os.getenv('RDS_PASSWORD')
-
-        PORT = os.get_env('RDS_PORT')
-        DATABASE = os.get_env('RDS_DATABASE')
+        DATABASE_TYPE = config('RDS_DATABASE_TYPE')
+        DBAPI = config('RDS_DBAPI')
+        ENDPOINT = config('RDS_ENDPOINT')
+        USER = config('RDS_USER')
+        PASSWORD = config('RDS_DATABASE_PASSWORD')
+        PORT = 5432
+        DATABASE = config('RDS_DATABASE')
 
         engine = create_engine(
             f"{DATABASE_TYPE}+{DBAPI}://{USER}:{PASSWORD}@{ENDPOINT}:{PORT}/{DATABASE}")
@@ -530,7 +530,7 @@ class LastManStandsScraper:
 
     def _upload_images_to_s3_bucket(self, player_dictionary):
         s3_client = boto3.client('s3')
-        bucket_name = 'lmsbucket2022'
+        bucket_name = config('S3_BUCKET_NAME')
         folder_name = f"{player_dictionary['PlayerName']}"
         result = s3_client.list_objects(Bucket=bucket_name, Prefix=folder_name)
         if 'Contents' not in result:
@@ -546,6 +546,7 @@ class LastManStandsScraper:
         '''run_crawler 
         Calling method to call other methods.
         '''
+        self.ask_local_or_online_storage()
         self.create_data_storage_folder()
         self.load_and_accept_cookies()
         self.get_player_list_container()
@@ -555,6 +556,7 @@ class LastManStandsScraper:
 
 
 def run():
+
     crawler = LastManStandsScraper()
     crawler.run_crawler()
 
