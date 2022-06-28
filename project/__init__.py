@@ -1,1 +1,1 @@
-import web_scraper
+import web_scraper as web_scraper

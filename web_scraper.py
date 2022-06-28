@@ -143,6 +143,7 @@ class LastManStandsScraper:
         4. Collect list of scorecard links and add to player dictionary
 
         '''
+        # TODO: Need this for both batting and bowling scorecards -> done just need to test it!
 
         for player_dictionary in self.master_list:
 
@@ -153,7 +154,16 @@ class LastManStandsScraper:
                                         '//*[@id="batting-history-link-current"]')).click()
 
             self._get_player_profile_photo(player_dictionary)
-            self._get_scoreboard_ids(player_dictionary)
+            self._get_scoreboard_ids_batting(player_dictionary)
+            ((self.driver).find_element(By.XPATH,
+                                        '//*[@id="pp-sm-bowling"]')).click()
+            ((self.driver).find_element(By.XPATH,
+                                        '//*[@id="bowling-history-link-current"]')).click()
+            self._get_scoreboard_ids_bowling(player_dictionary)
+            player_dictionary['ScorecardIds'] = set(
+                player_dictionary['ScorecardIds'])
+            player_dictionary['ScorecardIds'] = list(
+                player_dictionary['ScorecardIds'])
 
     def _get_player_profile_photo(self, player_dictionary):
         '''_get_player_profile_photo This function is to get link for player profile photo
@@ -169,9 +179,9 @@ class LastManStandsScraper:
         image_link = image_tag.get_attribute('src')
         player_dictionary["ImageLink"].append(image_link)
 
-    def _get_scoreboard_ids(self, player_dictionary) -> list:
+    def _get_scoreboard_ids_batting(self, player_dictionary) -> list:
         '''_get_scoreboard_ids 
-        This function locates and stores id of games each player is involved with.    
+        This function locates and stores id of games each player batted in.    
 
         1. Wait for the player game table to load.
         2. Once loaded locate and create a list of scoreboard links on that page.
@@ -201,12 +211,56 @@ class LastManStandsScraper:
             a_tag = row.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
             fixture_id = (link.split("="))[1]
+            # 0 is used for blank summary scorecard ids and therefore not required to be collected in scraper
             if fixture_id == "0":
                 continue
             else:
                 self.scorecard_id_list.append(fixture_id)
 
         player_dictionary['ScorecardIds'] = self.scorecard_id_list
+
+    def _get_scoreboard_ids_bowling(self, player_dictionary) -> list:
+        '''_get_scoreboard_ids 
+        This function locates and stores id of games each player is bowled in.    
+
+        1. Wait for the player game table to load.
+        2. Once loaded locate and create a list of scoreboard links on that page.
+        Arguments:
+            player_dictionary -- dictionary individual to each player to place collected data
+        Returns:
+            a list of scoreboard links
+        '''
+
+        delay = 10
+        try:
+            WebDriverWait(self.driver, delay).until(EC.presence_of_element_located(
+                (By.XPATH, '//div[@id="pp-bowling-history-container-current"]')))
+            scorecard_div = (self.driver).find_element(
+                By.XPATH, '//div[@id="pp-bowling-history-container-current"]')
+            time.sleep(1)
+        except TimeoutException:
+            print("Loading took too much time!")
+
+        scorecard_container = scorecard_div.find_element(
+            By.XPATH, './table[@class="rank-table"]')
+        scorecard_container_body = scorecard_container.find_element(
+            By.XPATH, './tbody')
+        scorecard_container_list = scorecard_container_body.find_elements(
+            By.XPATH, './tr')
+        self.scorecard_id_list = []
+
+        for row in scorecard_container_list:
+            a_tag = row.find_element(By.TAG_NAME, 'a')
+            link = a_tag.get_attribute('href')
+            fixture_id = (link.split("="))[1]
+            # 0 is used for blank summary scorecard ids and therefore not required to be collected in scraper
+            if fixture_id == "0":
+                continue
+            else:
+                self.scorecard_id_list.append(fixture_id)
+
+        player_dictionary['ScorecardIds'] = player_dictionary['ScorecardIds'] + \
+            self.scorecard_id_list
 
     def retrieve_and_save_all_player_data(self):
         ''' 
@@ -218,8 +272,9 @@ class LastManStandsScraper:
         '''
 
         for player_dictionary in self.master_list:
+            if self.user_choice == "2" or "3":
+                self._remove_scorecard_id_if_exists_in_RDS(player_dictionary)
             for id in player_dictionary['ScorecardIds']:
-
                 ((self.driver)).get(
                     f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
                 self._get_scorecard_player_data(player_dictionary)
@@ -424,6 +479,17 @@ class LastManStandsScraper:
             index += 1
 
     def _create_pandas_dataframes(self, player_dictionary):
+        '''_create_pandas_dataframes 
+        This method converts data collected in dictionaries into pandas dataframes
+
+        1. Create required dataframes from the data
+        2. Rename columns into SQL friendly format
+        3. Set dtype to relevant d types
+        4. Option to not create a datframe if player has no batting/bowling data.
+
+        Arguments:
+            player_dictionary -- _description_
+        '''
 
         # create player, uuid, scorecarddata frames
 
@@ -505,8 +571,14 @@ class LastManStandsScraper:
         elif not player_dictionary['ScorecardBowlingData']:
             self.combine_bowling = None
 
-    def _upload_dataframes_to_rds(self):
+    def _connect_to_RDS(self) -> create_engine:
+        '''_connect_to_RDS 
+        Method to craete connection to RDS database using sqlalchemy
 
+        Returns:
+            self.engine - connection
+
+        '''
         DATABASE_TYPE = config('RDS_DATABASE_TYPE')
         DBAPI = config('RDS_DBAPI')
         ENDPOINT = config('RDS_ENDPOINT')
@@ -515,20 +587,38 @@ class LastManStandsScraper:
         PORT = 5432
         DATABASE = config('RDS_DATABASE')
 
-        engine = create_engine(
+        self.engine = create_engine(
             f"{DATABASE_TYPE}+{DBAPI}://{USER}:{PASSWORD}@{ENDPOINT}:{PORT}/{DATABASE}")
 
-        self.players.to_sql('players', engine, if_exists='append')
+    def _upload_dataframes_to_rds(self):
+        '''_upload_dataframes_to_rds 
+        If dataframe exists, append it to SQL database.
+        '''
+
+        self._connect_to_RDS()
+        self.players.to_sql('players', self.engine, if_exists='append')
         self.combine_awards.to_sql(
-            'awards', engine, if_exists='append')
+            'awards', self.engine, if_exists='append')
         if self.combine_batting is not None:
             self.combine_batting.to_sql(
-                'batting', engine, if_exists='append')
+                'batting', self.engine, if_exists='append')
         if self.combine_bowling is not None:
             self.combine_bowling.to_sql(
-                'bowling', engine, if_exists='append')
+                'bowling', self.engine, if_exists='append')
 
     def _upload_images_to_s3_bucket(self, player_dictionary):
+        '''_upload_images_to_s3_bucket 
+        Method to upload collected images to S3 bucket
+
+        1. Connect to S3 bucket using boto3
+        2. Check if folder exists
+        3. If folder exists do nothing, if not upload image file
+
+
+        Arguments:
+            player_dictionary -- dictionary individual to each player to place collected data
+        '''
+
         s3_client = boto3.client('s3')
         bucket_name = config('S3_BUCKET_NAME')
         folder_name = f"{player_dictionary['PlayerName']}"
@@ -541,6 +631,30 @@ class LastManStandsScraper:
                 s3_client.put_object(Body=img_data, Bucket=bucket_name, Key=(
                     f"{folder_name}/{index}.jpg"))
                 index += 1
+
+    def _remove_scorecard_id_if_exists_in_RDS(self, player_dictionary):
+        '''_remove_scorecard_id_if_exists_in_RDS 
+        Method to prevent recraping of the same data
+
+        1. Connect to RDS database using sqlalchemy
+        2. Run sql query asking to return all scorecard id of all batting fixtures
+        3. Convert pandas dataframe into string format
+        4. Convert scorecard id column into a list
+        5. Set the scorecard id list of the player dictinoary to the difference of two sets of the collected values
+
+        Arguments:
+            player_dictionary -- dictionary individual to each player to place collected data
+        '''
+
+        self._connect_to_RDS()
+        query = f"(SELECT batting.scorecard_id, players.name FROM batting JOIN players ON players.uuid = batting.uuid WHERE players.name = '{player_dictionary['PlayerName']}' GROUP BY batting.scorecard_id, players.name) UNION (SELECT bowling.scorecard_id, players.name FROM bowling JOIN players ON players.uuid = bowling.uuid WHERE players.name = '{player_dictionary['PlayerName']}' GROUP BY bowling.scorecard_id, players.name)"
+        player_scorecard_id_table = pd.read_sql_query(query, self.engine)
+        player_scorecard_id_table['scorecard_id'] = player_scorecard_id_table['scorecard_id'].astype(
+            'string')
+        scraped_fixture_list = player_scorecard_id_table['scorecard_id'].values.tolist(
+        )
+        player_dictionary['ScorecardIds'] = list(
+            set(player_dictionary['ScorecardIds']) - set(scraped_fixture_list))
 
     def run_crawler(self):
         '''run_crawler 

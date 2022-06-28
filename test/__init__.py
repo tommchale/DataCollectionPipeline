@@ -1,1 +1,1 @@
-import test.test_scraper as test_scraper
+import test_scraper as test_scraper
