@@ -1,6 +1,7 @@
 from email.mime import image
 from typing import Container
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
@@ -14,7 +15,7 @@ import os
 import json
 import requests
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 import boto3
 
 
@@ -39,13 +40,14 @@ class LastManStandsScraper:
                            'ScorecardIds': ['345121'], 'ScorecardBattingData': [], 'ScorecardBowlingData': [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}]
         self.test_list_2 = [{'PlayerName': 'Freddie Simon', 'UUID': '5b857df2-b7e5-490c-bf96-23a261398afd', 'PlayerLink': 'https://www.lastmanstands.com/cricket-player/t20?playerid=291389', 'ImageLink': ['https://admin.lastmanstands.com/SpawtzApp/Images/User/291389_UserProfileImage.jpeg?646828954'], 'ScorecardIds': ['345124', '345121'], 'ScorecardBattingData': [{'How Out': 'Terrible Bloke', 'Runs': '112', 'Balls': '34',
                                                                                                                                                                                                                                                                                                                                                                              'Fours': '7', 'Sixes': '9', 'SR': '329.41'}, {'How Out': 'Caught', 'Runs': '9', 'Balls': '4', 'Fours': '2', 'Sixes': '0', 'SR': '225.00'}], 'ScorecardBowlingData': [{'Overs': '4.0', 'Runs': '38', 'Wickets': '1', 'Maidens': '0', 'Economy': '9.50'}, {'Overs': '2.1', 'Runs': '11', 'Wickets': '1', 'Maidens': '0', 'Economy': '5.24'}], 'Awards': {'MostValuablePlayer': 1, 'MostValuableBatter': 1, 'MostValuableBowler': 0}}]
+        self.user_choice = "1"
 
     def ask_local_or_online_storage(self):
         self.user_choice = input(
             ' \n Please press 1 for local storage, 2 for online (RDS - table, S3 - images) or 3 for both: \n')
 
     def create_data_storage_folder(self):
-        '''save_data_collected 
+        '''save_data_collected
 
         1. Check and create raw_data folder for data storage
         Returns:
@@ -64,14 +66,16 @@ class LastManStandsScraper:
     def load_and_accept_cookies(self) -> webdriver.Chrome:
         '''
         Open Last Man Stands Site and accept cookies
+        Set driver to google Chrome Beta version sue to bug in driver v 103
 
         Returns
         -------
         self.driver: webdriver.Chrome
 
         '''
-        self.driver = webdriver.Chrome()
-
+        options = Options()
+        options.binary_location = "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta"
+        self.driver = webdriver.Chrome(chrome_options=options)
         (self.driver).get(self.URL)
         delay = 10
         try:
@@ -100,6 +104,7 @@ class LastManStandsScraper:
         '''
 
         # finds the container within which the full list of player links are contained
+
         batting_button = (self.driver).find_element(
             By.XPATH, '//*[@id="tp-sm-batting"]')
         batting_button.click()
@@ -131,11 +136,11 @@ class LastManStandsScraper:
             a_tag = row.find_element(By.TAG_NAME, 'a')
             link = a_tag.get_attribute('href')
             player_dictionary = {"PlayerName": name, "UUID": str(
-                uuid.uuid4()), "PlayerLink": link, 'ImageLink': [], "ScorecardIds": [], "ScorecardBattingData": [], "ScorecardBowlingData": [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}
+                uuid.uuid4()), "PlayerLink": link, 'ImageLink': [], "ScorecardBattingIds": [], "ScorecardBowlingIds": [], "ScorecardBattingData": [], "ScorecardBowlingData": [], "Awards": {"MostValuablePlayer": 0, "MostValuableBatter": 0, "MostValuableBowler": 0}}
             self.master_list.append(player_dictionary)
 
     def collect_scoreboard_ids_and_profile_image_link(self):
-        '''_collect_scoreboard_ids_and_profile_image_link 
+        '''_collect_scoreboard_ids_and_profile_image_link
 
         1. Load each Player Link
         2. Collect player profile photo link
@@ -148,6 +153,7 @@ class LastManStandsScraper:
         for player_dictionary in self.master_list:
 
             (self.driver).get(player_dictionary['PlayerLink'])
+
             ((self.driver).find_element(By.XPATH,
                                         '//*[@id="pp-sm-batting"]')).click()
             ((self.driver).find_element(By.XPATH,
@@ -160,10 +166,6 @@ class LastManStandsScraper:
             ((self.driver).find_element(By.XPATH,
                                         '//*[@id="bowling-history-link-current"]')).click()
             self._get_scoreboard_ids_bowling(player_dictionary)
-            player_dictionary['ScorecardIds'] = set(
-                player_dictionary['ScorecardIds'])
-            player_dictionary['ScorecardIds'] = list(
-                player_dictionary['ScorecardIds'])
 
     def _get_player_profile_photo(self, player_dictionary):
         '''_get_player_profile_photo This function is to get link for player profile photo
@@ -180,8 +182,8 @@ class LastManStandsScraper:
         player_dictionary["ImageLink"].append(image_link)
 
     def _get_scoreboard_ids_batting(self, player_dictionary) -> list:
-        '''_get_scoreboard_ids 
-        This function locates and stores id of games each player batted in.    
+        '''_get_scoreboard_ids
+        This function locates and stores id of games each player batted in.
 
         1. Wait for the player game table to load.
         2. Once loaded locate and create a list of scoreboard links on that page.
@@ -190,38 +192,41 @@ class LastManStandsScraper:
         Returns:
             a list of scoreboard links
         '''
-
+        scorecard_div = (self.driver).find_element(
+            By.XPATH, '//div[@id="pp-batting-history-container-current"]')
         delay = 10
         try:
-            WebDriverWait(self.driver, delay).until(EC.presence_of_element_located(
-                (By.XPATH, '//table[@class="rank-table"]')))
-            scorecard_container = (self.driver).find_element(
-                By.XPATH, '//table[@class="rank-table"]')
+            WebDriverWait(scorecard_div, delay).until(EC.presence_of_element_located(
+                (By.XPATH, './table[@class="rank-table"]')))
+            scorecard_container = scorecard_div.find_element(
+                By.XPATH, './table[@class="rank-table"]')
             time.sleep(1)
         except TimeoutException:
             print("Loading took too much time!")
+            scorecard_container = None
 
-        scorecard_container_body = scorecard_container.find_element(
-            By.XPATH, './tbody')
-        scorecard_container_list = scorecard_container_body.find_elements(
-            By.XPATH, './tr')
-        self.scorecard_id_list = []
+        if scorecard_container is not None:
+            scorecard_container_body = scorecard_container.find_element(
+                By.XPATH, './tbody')
+            scorecard_container_list = scorecard_container_body.find_elements(
+                By.XPATH, './tr')
+            self.scorecard_batting_id_list = []
 
-        for row in scorecard_container_list:
-            a_tag = row.find_element(By.TAG_NAME, 'a')
-            link = a_tag.get_attribute('href')
-            fixture_id = (link.split("="))[1]
-            # 0 is used for blank summary scorecard ids and therefore not required to be collected in scraper
-            if fixture_id == "0":
-                continue
-            else:
-                self.scorecard_id_list.append(fixture_id)
+            for row in scorecard_container_list:
+                a_tag = row.find_element(By.TAG_NAME, 'a')
+                link = a_tag.get_attribute('href')
+                fixture_id = (link.split("="))[1]
+                # 0 is used for blank summary scorecard ids and therefore not required to be collected in scraper
+                if fixture_id == "0":
+                    continue
+                else:
+                    self.scorecard_batting_id_list.append(fixture_id)
 
-        player_dictionary['ScorecardIds'] = self.scorecard_id_list
+        player_dictionary['ScorecardBattingIds'] = self.scorecard_batting_id_list
 
     def _get_scoreboard_ids_bowling(self, player_dictionary) -> list:
-        '''_get_scoreboard_ids 
-        This function locates and stores id of games each player is bowled in.    
+        '''_get_scoreboard_ids
+        This function locates and stores id of games each player is bowled in.
 
         1. Wait for the player game table to load.
         2. Once loaded locate and create a list of scoreboard links on that page.
@@ -230,70 +235,104 @@ class LastManStandsScraper:
         Returns:
             a list of scoreboard links
         '''
-
+        scorecard_div = (self.driver).find_element(
+            By.XPATH, '//div[@id="pp-bowling-history-container-current"]')
         delay = 10
         try:
-            WebDriverWait(self.driver, delay).until(EC.presence_of_element_located(
-                (By.XPATH, '//div[@id="pp-bowling-history-container-current"]')))
-            scorecard_div = (self.driver).find_element(
-                By.XPATH, '//div[@id="pp-bowling-history-container-current"]')
+            WebDriverWait(scorecard_div, delay).until(EC.presence_of_element_located(
+                (By.XPATH, './table[@class="rank-table"]')))
+            scorecard_container = scorecard_div.find_element(
+                By.XPATH, './table[@class="rank-table"]')
             time.sleep(1)
         except TimeoutException:
             print("Loading took too much time!")
+            scorecard_container = None
 
-        scorecard_container = scorecard_div.find_element(
-            By.XPATH, './table[@class="rank-table"]')
-        scorecard_container_body = scorecard_container.find_element(
-            By.XPATH, './tbody')
-        scorecard_container_list = scorecard_container_body.find_elements(
-            By.XPATH, './tr')
-        self.scorecard_id_list = []
+        if scorecard_container is not None:
+            scorecard_container_body = scorecard_container.find_element(
+                By.XPATH, './tbody')
+            scorecard_container_list = scorecard_container_body.find_elements(
+                By.XPATH, './tr')
+            self.scorecard_bowling_id_list = []
 
-        for row in scorecard_container_list:
-            a_tag = row.find_element(By.TAG_NAME, 'a')
-            link = a_tag.get_attribute('href')
-            fixture_id = (link.split("="))[1]
-            # 0 is used for blank summary scorecard ids and therefore not required to be collected in scraper
-            if fixture_id == "0":
-                continue
-            else:
-                self.scorecard_id_list.append(fixture_id)
+            for row in scorecard_container_list:
+                a_tag = row.find_element(By.TAG_NAME, 'a')
+                link = a_tag.get_attribute('href')
+                fixture_id = (link.split("="))[1]
+                # 0 is used for blank summary scorecard ids and therefore not required to be collected in scraper
+                if fixture_id == "0":
+                    continue
+                else:
+                    self.scorecard_bowling_id_list.append(fixture_id)
 
-        player_dictionary['ScorecardIds'] = player_dictionary['ScorecardIds'] + \
-            self.scorecard_id_list
+            player_dictionary['ScorecardBowlingIds'] = self.scorecard_bowling_id_list
 
     def retrieve_and_save_all_player_data(self):
-        ''' 
+        '''
         This method locates, pulls and save fixture information relevant to each player.
 
         1. Load each relevant page for each fixture id.
         2. Run collection methods to gather batter, bowler and award data.
         3. Run method to programatically store player data.
+        4. Following removal of pre-uploaded data:
+            i. only collect data is scorecard ids exist
+            ii. only create and upload dataframes if scorecard data exists
+
         '''
 
         for player_dictionary in self.master_list:
-            if self.user_choice == "2" or "3":
+            if self.user_choice == "2" or self.user_choice == "3":
                 self._remove_scorecard_id_if_exists_in_RDS(player_dictionary)
-            for id in player_dictionary['ScorecardIds']:
-                ((self.driver)).get(
-                    f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
-                self._get_scorecard_player_data(player_dictionary)
-                ((self.driver)).get(
-                    f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid={id}")
-                self._get_scorecard_player_data(player_dictionary)
-                ((self.driver)).get(
-                    f"https://www.lastmanstands.com/leagues/scorecard/stats?fixtureid={id}")
-                self._get_player_awards(player_dictionary)
-            if self.user_choice == "1" or self.user_choice == "3":
-                self._create_player_directory_structure(player_dictionary)
-                self._save_player_dictionary_to_file(player_dictionary)
-                self._download_and_save_images(player_dictionary)
-            elif self.user_choice == "2" or self.user_choice == "3":
-                self._create_pandas_dataframes(player_dictionary)
-                self._upload_dataframes_to_rds()
-                self._upload_images_to_s3_bucket(player_dictionary)
 
-    def _get_scorecard_player_data(self, player_dictionary):
+            if player_dictionary['ScorecardBattingIds']:
+                for id in player_dictionary['ScorecardBattingIds']:
+
+                    ((self.driver)).get(
+                        f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
+
+                    self._get_scorecard_batting_data(player_dictionary)
+
+                    ((self.driver)).get(
+                        f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid={id}")
+
+                    self._get_scorecard_batting_data(player_dictionary)
+
+                    ((self.driver)).get(
+                        f"https://www.lastmanstands.com/leagues/scorecard/stats?fixtureid={id}")
+
+                    self._get_most_valuable_player_award(
+                        player_dictionary)
+                    self._get_most_valuable_batter_award(
+                        player_dictionary)
+            if player_dictionary['ScorecardBowlingIds']:
+                for id in player_dictionary['ScorecardBowlingIds']:
+
+                    ((self.driver)).get(
+                        f"https://www.lastmanstands.com/leagues/scorecard/1st-innings?fixtureid={id}")
+
+                    self._get_scorecard_bowling_data(player_dictionary)
+
+                    ((self.driver)).get(
+                        f"https://www.lastmanstands.com/leagues/scorecard/2nd-innings?fixtureid={id}")
+
+                    self._get_scorecard_bowling_data(player_dictionary)
+
+                    ((self.driver)).get(
+                        f"https://www.lastmanstands.com/leagues/scorecard/stats?fixtureid={id}")
+
+                    self._get_most_valuable_bowler_award(player_dictionary)
+
+            if player_dictionary['ScorecardBattingIds'] or player_dictionary['ScorecardBowlingIds']:
+                if self.user_choice == "1" or self.user_choice == "3":
+                    self._create_player_directory_structure(player_dictionary)
+                    self._save_player_dictionary_to_file(player_dictionary)
+                    self._download_and_save_images(player_dictionary)
+                if self.user_choice == "2" or self.user_choice == "3":
+                    self._create_pandas_dataframes(player_dictionary)
+                    self._upload_dataframes_to_rds()
+                    self._upload_images_to_s3_bucket(player_dictionary)
+
+    def _get_scorecard_batting_data(self, player_dictionary):
         '''_get_scorecard_player_data Locate and add batting and bowling data to each player dictionary
 
         Arguments:
@@ -307,11 +346,6 @@ class LastManStandsScraper:
         batting_data_body = scorecard_data_table_list[0].find_element(
             By.XPATH, './tbody')
         batting_data_list = batting_data_body.find_elements(
-            By.XPATH, './tr')
-
-        bowling_data_body = scorecard_data_table_list[1].find_element(
-            By.XPATH, './tbody')
-        bowling_data_list = bowling_data_body.find_elements(
             By.XPATH, './tr')
 
         # If name exists in batting data - find data
@@ -328,6 +362,21 @@ class LastManStandsScraper:
                         batting_dictionary)
             except NoSuchElementException:
                 continue
+
+    def _get_scorecard_bowling_data(self, player_dictionary):
+        '''_get_scorecard_bowling_data 
+        Locate and add bowling data to each player dictionary
+
+        Arguments:
+            player_dictionary -- dictionary individual to each player to place collected data
+        '''
+        # Create tables for battings data and bowling data as information stored in different format for each one
+        scorecard_data_table_list = (
+            self.driver).find_elements(By.XPATH, './/table')
+        bowling_data_body = scorecard_data_table_list[1].find_element(
+            By.XPATH, './tbody')
+        bowling_data_list = bowling_data_body.find_elements(
+            By.XPATH, './tr')
 
         # If name exists in bowling data - find data
 
@@ -496,15 +545,19 @@ class LastManStandsScraper:
         self.players = pd.DataFrame(player_dictionary, columns=[
             'PlayerName', 'UUID', 'PlayerLink'], index=[0])
         uuid = pd.DataFrame(player_dictionary, columns=['UUID'], index=[0])
-        scorecards = pd.DataFrame(player_dictionary, columns=[
-                                  'ScorecardIds', 'UUID'])
+        batting_scorecards = pd.DataFrame(player_dictionary, columns=[
+            'ScorecardBattingIds', 'UUID'])
+        bowling_scorecards = pd.DataFrame(player_dictionary, columns=[
+            'ScorecardBowlingIds', 'UUID'])
 
         # rename player, scorecard and uuid df
 
         self.players = self.players.rename(
             columns={"PlayerName": "name", "UUID": "uuid", "PlayerLink": "lms_profile_link"})
-        scorecards = scorecards.rename(
-            columns={"ScorecardIds": "scorecard_id", "UUID": "uuid"})
+        batting_scorecards = batting_scorecards.rename(
+            columns={"ScorecardBattingIds": "scorecard_batting_id", "UUID": "uuid"})
+        bowling_scorecards = bowling_scorecards.rename(
+            columns={"ScorecardBowlingIds": "scorecard_bowling_id", "UUID": "uuid"})
         uuid = uuid.rename(columns={"UUID": "uuid"})
 
         # set players and scorecards dtypes
@@ -514,8 +567,15 @@ class LastManStandsScraper:
         self.players['lms_profile_link'] = self.players['lms_profile_link'].astype(
             'string')
 
-        scorecards['scorecard_id'] = scorecards['scorecard_id'].astype('int64')
-        scorecards['uuid'] = scorecards['uuid'].astype('string')
+        batting_scorecards['scorecard_batting_id'] = batting_scorecards['scorecard_batting_id'].astype(
+            'int64')
+        batting_scorecards['uuid'] = batting_scorecards['uuid'].astype(
+            'string')
+
+        bowling_scorecards['scorecard_bowling_id'] = bowling_scorecards['scorecard_bowling_id'].astype(
+            'int64')
+        bowling_scorecards['uuid'] = bowling_scorecards['uuid'].astype(
+            'string')
 
         # create, rename and merge awards with uuid
         awards = pd.DataFrame(player_dictionary['Awards'], index=[0])
@@ -533,7 +593,7 @@ class LastManStandsScraper:
             batting_data = batting_data.rename(columns={"How Out": "how_out", "Runs": "runs_scored",
                                                         "Balls": "balls_faced", "Fours": "fours", "Sixes": "sixes", "SR": "strike_rate"})
             self.combine_batting = pd.merge(
-                scorecards, batting_data, left_index=True, right_index=True)
+                batting_scorecards, batting_data, left_index=True, right_index=True)
             self.combine_batting['how_out'] = self.combine_batting['how_out'].astype(
                 'category')
             self.combine_batting['runs_scored'] = self.combine_batting['runs_scored'].astype(
@@ -556,7 +616,7 @@ class LastManStandsScraper:
             bowling_data = bowling_data.rename(columns={
                 "Overs": "overs", "Runs": "runs_conceeded", "Wickets": "wickets", "Maidens": "maidens", "Economy": "economy"})
             self.combine_bowling = pd.merge(
-                scorecards, bowling_data, left_index=True, right_index=True)
+                bowling_scorecards, bowling_data, left_index=True, right_index=True)
             self.combine_bowling['overs'] = self.combine_bowling['overs'].astype(
                 'float64')
             self.combine_bowling['runs_conceeded'] = self.combine_bowling['runs_conceeded'].astype(
@@ -647,14 +707,27 @@ class LastManStandsScraper:
         '''
 
         self._connect_to_RDS()
-        query = f"(SELECT batting.scorecard_id, players.name FROM batting JOIN players ON players.uuid = batting.uuid WHERE players.name = '{player_dictionary['PlayerName']}' GROUP BY batting.scorecard_id, players.name) UNION (SELECT bowling.scorecard_id, players.name FROM bowling JOIN players ON players.uuid = bowling.uuid WHERE players.name = '{player_dictionary['PlayerName']}' GROUP BY bowling.scorecard_id, players.name)"
-        player_scorecard_id_table = pd.read_sql_query(query, self.engine)
-        player_scorecard_id_table['scorecard_id'] = player_scorecard_id_table['scorecard_id'].astype(
-            'string')
-        scraped_fixture_list = player_scorecard_id_table['scorecard_id'].values.tolist(
-        )
-        player_dictionary['ScorecardIds'] = list(
-            set(player_dictionary['ScorecardIds']) - set(scraped_fixture_list))
+        inspector = inspect(self.engine)
+        if inspector.has_table('batting'):
+            batting_query = f"(SELECT batting.scorecard_batting_id, players.name FROM batting JOIN players ON players.uuid = batting.uuid WHERE players.name = '{player_dictionary['PlayerName']}' GROUP BY batting.scorecard_batting_id, players.name)"
+            batting_scorecard_id_table = pd.read_sql_query(
+                batting_query, self.engine)
+            batting_scorecard_id_table['scorecard_batting_id'] = batting_scorecard_id_table['scorecard_batting_id'].astype(
+                'string')
+            scraped_batting_fixture_list = batting_scorecard_id_table['scorecard_batting_id'].values.tolist(
+            )
+            player_dictionary['ScorecardBattingIds'] = list(
+                set(player_dictionary['ScorecardBattingIds']) - set(scraped_batting_fixture_list))
+        if inspector.has_table('bowling'):
+            bowling_query = f"(SELECT bowling.scorecard_bowling_id, players.name FROM bowling JOIN players ON players.uuid = bowling.uuid WHERE players.name = '{player_dictionary['PlayerName']}' GROUP BY bowling.scorecard_bowling_id, players.name)"
+            bowling_scorecard_id_table = pd.read_sql_query(
+                bowling_query, self.engine)
+            bowling_scorecard_id_table['scorecard_bowling_id'] = bowling_scorecard_id_table['scorecard_bowling_id'].astype(
+                'string')
+            scraped_bowling_fixture_list = bowling_scorecard_id_table['scorecard_bowling_id'].values.tolist(
+            )
+            player_dictionary['ScorecardBowlingIds'] = list(
+                set(player_dictionary['ScorecardBowlingIds']) - set(scraped_bowling_fixture_list))
 
     def run_crawler(self):
         '''run_crawler 
