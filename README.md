@@ -71,4 +71,11 @@ I created a general Scraper class using Selenium. In the constructor, the Seleni
 * Scraped image data hosted in an s3 bucket uploaded using boto3
 * Functionality also added to provide user option for local or online data storage
 * env file added to ensire security of credentials for connecting to databases.
-         
+
+## Docker
+
+Following final testing and final refactor of code, scraper set to headless mode and conatinerised. This was acheieved by creating a Docker image to run the scraper, pushing it to Dockerhub, creating a new EC2 instance, pull the docker container onto that instance and running the scraper from there. 
+
+## Prometheus
+
+Prometheus was then ysing to monitor the EC2 instance and docker container that runs the scraper. Once configured a dashboard was created with Grafana to monitor the metrics of the containers and the hardware metrics of the EC2 instance.
