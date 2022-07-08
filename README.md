@@ -72,6 +72,12 @@ I created a general Scraper class using Selenium. In the constructor, the Seleni
 * Functionality also added to provide user option for local or online data storage
 * env file added to ensire security of credentials for connecting to databases.
 
+## Preventing recraping Data
+
+* To prevent rescraping and uploading the same data to the RDS database, the _remove_scorecard_id_if_exists_in_RDS() connects to the RDS database and runs a query to pull all the batting and bowling ids in teh database. 
+* The scorecard ids are then converted into a list and compared to the batting and bowling ids collected for each player.
+* Any matching ids are removed and then the scraper continues for scorecard ids not already in the database.
+
 ## Docker
 
 Following final testing and final refactor of code, scraper set to headless mode and conatinerised. This was acheieved by creating a Docker image to run the scraper, pushing it to Dockerhub, creating a new EC2 instance, pull the docker container onto that instance and running the scraper from there. 
