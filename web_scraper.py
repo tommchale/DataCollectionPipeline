@@ -1,3 +1,10 @@
+import time
+import uuid
+import sys
+import os
+import json
+
+
 from email.mime import image
 from typing import Container
 from selenium import webdriver
@@ -8,11 +15,7 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
 from decouple import config
-import time
-import uuid
-import sys
-import os
-import json
+
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, inspect
@@ -74,7 +77,20 @@ class LastManStandsScraper:
 
         '''
         options = Options()
-        options.binary_location = "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta"
+
+        OS = sys.platform
+
+        if OS == "darwin":
+            options.binary_location = "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta"
+            options.headless = True
+
+        if OS == "linux":
+            options.binary_location = "/usr/bin/google-chrome-beta"
+            options.add_argument('--headless')
+            options.add_argument('--no-sandbox')
+            options.add_argument('window-size=1920,1080')
+            options.add_argument('--disable-dev-shm-usage')
+
         self.driver = webdriver.Chrome(chrome_options=options)
         (self.driver).get(self.URL)
         delay = 10
@@ -85,7 +101,7 @@ class LastManStandsScraper:
             accept_cookies_button = WebDriverWait(self.driver, delay).until(
                 EC.presence_of_element_located((By.XPATH, '//*[@id="gdpr-accept-btn"]')))
             print("Accept Cookies Button Ready!")
-            accept_cookies_button.click()
+            accept_cookies_button.click()dock
             time.sleep(1)
         except TimeoutException:
             print("Loading took too much time!")
