@@ -82,6 +82,11 @@ I created a general Scraper class using Selenium. In the constructor, the Seleni
 
 Following final testing and final refactor of code, scraper set to headless mode and conatinerised. This was acheieved by creating a Docker image to run the scraper, pushing it to Dockerhub, creating a new EC2 instance, pull the docker container onto that instance and running the scraper from there. 
 
-## Prometheus
+## Prometheus and Grafana
 
 Prometheus was then ysing to monitor the EC2 instance and docker container that runs the scraper. Once configured a dashboard was created with Grafana to monitor the metrics of the containers and the hardware metrics of the EC2 instance.
+
+## CI/CD Pipleline
+
+* Configured Github actions to build and push docker image to Dockerhub. 
+* Configured cron jobs in the EC2 instance to pull latest image and run the scraper once a week - following new fixtures.
