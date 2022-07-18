@@ -15,8 +15,8 @@ I created a general Scraper class using Selenium. In the constructor, the Seleni
 ## Methods used
 
 * load_and_accept_cookies(self) -> webdriver.Chrome: : 
-      ** this loads the last mans stands home team page and clicks "accept cookies button".
-      ** due to inconsistent load times for the cookies container used a "WebDriverWait instead of a simple time delay
+      * this loads the last mans stands home team page and clicks "accept cookies button".
+      * due to inconsistent load times for the cookies container used a "WebDriverWait instead of a simple time delay
 * get_player_list_container(self) -> Container:
       * simple method to return a list of the link to each individual player page from the main team page
       * again required a WebDriverWait to wait for the table containing the links to each player to load when clicked.
